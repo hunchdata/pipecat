@@ -152,10 +152,17 @@ class AnthropicLLMService(LLMService):
 
             await self.start_ttfb_metrics()
 
+            if messages and messages[0]["role"] == "system":
+                system = messages[0]["content"]
+                send_messages = messages[1:]
+            else:
+                system = NOT_GIVEN
+                send_messages = messages
+
             params = {
                 "tools": context.tools or [],
-                "system": context.system,
-                "messages": messages,
+                "system": system,
+                "messages": send_messages,
                 "model": self.model_name,
                 "max_tokens": self._settings["max_tokens"],
                 "stream": True,
@@ -163,7 +170,6 @@ class AnthropicLLMService(LLMService):
                 "top_k": self._settings["top_k"],
                 "top_p": self._settings["top_p"],
             }
-
             params.update(self._settings["extra"])
 
             response = await api_call(**params)
@@ -536,19 +542,6 @@ class AnthropicLLMContext(OpenAILLMContext):
             self._messages[:] = [self.from_standard_message(m) for m in self._messages]
         except Exception as e:
             logger.error(f"Error mapping messages: {e}")
-
-        # See if we should pull the system message out of our context.messages list. (For
-        # compatibility with Open AI messages format.)
-        if self.messages and self.messages[0]["role"] == "system":
-            if len(self.messages) == 1:
-                # If we have only have a system message in the list, all we can really do
-                # without introducing too much magic is change the role to "user".
-                self.messages[0]["role"] = "user"
-            else:
-                # If we have more than one message, we'll pull the system message out of the
-                # list.
-                self.system = self.messages[0]["content"]
-                self.messages.pop(0)
 
         # Merge consecutive messages with the same role.
         i = 0
